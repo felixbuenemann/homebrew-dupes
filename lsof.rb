@@ -1,11 +1,17 @@
+class LsofDownloadStrategy < CurlDownloadStrategy
+  def stage
+    super
+    safe_system "/usr/bin/tar", "xf", "#{name}_#{version}_src.tar"
+    cd "#{name}_#{version}_src"
+  end
+end
+
 class Lsof < Formula
   desc "Utility to list open files"
   homepage "https://people.freebsd.org/~abe/"
-  # 4.89 has major problems on OS X blocking upgrade for now.
-  # https://github.com/Homebrew/homebrew-dupes/pull/537
-  # url "ftp://sunsite.ualberta.ca/pub/Mirror/lsof/lsof_4.88.tar.bz2"
-  url "https://mirrorservice.org/sites/lsof.itap.purdue.edu/pub/tools/unix/lsof/OLD/lsof_4.88.tar.bz2"
-  sha256 "fe6f9b0e26b779ccd0ea5a0b6327c2b5c38d207a6db16f61ac01bd6c44e5c99b"
+  url "https://mirrorservice.org/sites/lsof.itap.purdue.edu/pub/tools/unix/lsof/lsof_4.89.tar.bz2",
+    :using => LsofDownloadStrategy
+  sha256 "81ac2fc5fdc944793baf41a14002b6deb5a29096b387744e28f8c30a360a3718"
 
   bottle do
     cellar :any_skip_relocation
@@ -14,22 +20,26 @@ class Lsof < Formula
     sha256 "92a1f687aa8a0df343b90771e16f6a11aa60968c034c9660318e38142533fb82" => :mavericks
   end
 
+  patch do
+    url "https://raw.githubusercontent.com/Homebrew/formula-patches/c3acbb8/lsof/lsof-489-darwin-compile-fix.patch"
+    sha256 "997d8c147070987350fc12078ce83cd6e9e159f757944879d7e4da374c030755"
+  end
+
   def install
     ENV["LSOF_INCLUDE"] = "#{MacOS.sdk_path}/usr/include"
 
-    system "tar", "xf", "lsof_#{version}_src.tar"
+    # Source hardcodes full header paths at /usr/include
+    inreplace %w[
+      dialects/darwin/kmem/dlsof.h
+      dialects/darwin/kmem/machine.h
+      dialects/darwin/libproc/machine.h
+    ], "/usr/include", "#{MacOS.sdk_path}/usr/include"
 
-    cd "lsof_#{version}_src" do
-      # Source hardcodes full header paths at /usr/include
-      inreplace %w[dialects/darwin/kmem/dlsof.h dialects/darwin/kmem/machine.h
-                   dialects/darwin/libproc/machine.h],
-                "/usr/include", MacOS.sdk_path.to_s + "/usr/include"
-
-      mv "00README", "../README"
-      system "./Configure", "-n", `uname -s`.chomp.downcase
-      system "make"
-      bin.install "lsof"
-    end
+    mv "00README", "README"
+    system "./Configure", "-n", `uname -s`.chomp.downcase
+    system "make"
+    bin.install "lsof"
+    man8.install "lsof.8"
   end
 
   test do
